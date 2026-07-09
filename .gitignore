@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.venv/
+*.log
+*.sqlite3
+dashboard.html
+config.local.json
+.env.local
+dev-env-backups-*/
+security-quarantine-*/
+.DS_Store

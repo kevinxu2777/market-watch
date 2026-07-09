@@ -1,0 +1,473 @@
+{
+  "poll_interval_seconds": 300,
+  "dashboard": {
+    "enabled": true,
+    "port": 8765
+  },
+  "alerting": {
+    "min_email_score": 55,
+    "critical_email_score": 85,
+    "batch_email_minutes": 60,
+    "stock_price_move_email_score": 85
+  },
+  "digest": {
+    "enabled": true,
+    "lookback_hours": 12,
+    "due_window_minutes": 5,
+    "times_local": [
+      {
+        "name": "premarket",
+        "time": "08:30"
+      },
+      {
+        "name": "midday",
+        "time": "12:00"
+      },
+      {
+        "name": "after_close",
+        "time": "16:15"
+      }
+    ]
+  },
+  "news": {
+    "feeds": [
+      "https://feeds.bbci.co.uk/news/business/rss.xml",
+      "https://feeds.bbci.co.uk/news/world/rss.xml",
+      "https://www.investing.com/rss/news_25.rss",
+      "https://www.investing.com/rss/news_301.rss",
+      "https://www.marketwatch.com/rss/topstories",
+      "https://www.cnbc.com/id/100003114/device/rss/rss.html"
+    ],
+    "min_score": 35,
+    "source_weights": {
+      "marketwatch.com": 10,
+      "cnbc.com": 10,
+      "investing.com": 8,
+      "bbc.co.uk": 5
+    },
+    "keyword_weights": {
+      "federal reserve": 35,
+      "fed": 22,
+      "fomc": 35,
+      "rate cut": 30,
+      "rate hike": 30,
+      "inflation": 24,
+      "cpi": 26,
+      "pce": 26,
+      "jobs report": 24,
+      "payrolls": 24,
+      "treasury yields": 22,
+      "oil": 16,
+      "gold": 14,
+      "opec": 26,
+      "tariff": 28,
+      "sanctions": 30,
+      "war": 24,
+      "attack": 24,
+      "ceasefire": 20,
+      "china": 14,
+      "taiwan": 22,
+      "russia": 16,
+      "ukraine": 16,
+      "israel": 16,
+      "iran": 22,
+      "earnings": 16,
+      "guidance": 20,
+      "downgrade": 18,
+      "upgrade": 14,
+      "bankruptcy": 35,
+      "merger": 16,
+      "antitrust": 22,
+      "sec": 18
+    },
+    "suppress_keywords": [
+      "personal finance",
+      "retirement",
+      "mortgage rates",
+      "social security",
+      "travel",
+      "shopping"
+    ],
+    "keywords": [
+      "federal reserve",
+      "fed",
+      "fomc",
+      "rate cut",
+      "rate hike",
+      "inflation",
+      "cpi",
+      "pce",
+      "jobs report",
+      "payrolls",
+      "treasury yields",
+      "oil",
+      "gold",
+      "opec",
+      "tariff",
+      "sanctions",
+      "war",
+      "attack",
+      "ceasefire",
+      "china",
+      "taiwan",
+      "russia",
+      "ukraine",
+      "israel",
+      "iran",
+      "earnings",
+      "guidance",
+      "downgrade",
+      "upgrade",
+      "bankruptcy",
+      "merger",
+      "antitrust",
+      "sec"
+    ],
+    "high_impact_keywords": [
+      "federal reserve",
+      "fomc",
+      "rate hike",
+      "rate cut",
+      "war",
+      "attack",
+      "sanctions",
+      "bankruptcy",
+      "opec",
+      "tariff"
+    ],
+    "topic_cooldown_hours": 4,
+    "topic_escalation_score": 15
+  },
+  "market_data": {
+    "instruments": [
+      {
+        "name": "WTI Crude Oil",
+        "symbol": "CL=F",
+        "daily_move_alert_pct": 3.0
+      },
+      {
+        "name": "Gold",
+        "symbol": "GC=F",
+        "daily_move_alert_pct": 1.5
+      },
+      {
+        "name": "S&P 500 Futures",
+        "symbol": "ES=F",
+        "daily_move_alert_pct": 1.2
+      },
+      {
+        "name": "Nasdaq 100 Futures",
+        "symbol": "NQ=F",
+        "daily_move_alert_pct": 1.5
+      },
+      {
+        "name": "US Dollar Index",
+        "symbol": "DX-Y.NYB",
+        "daily_move_alert_pct": 0.8
+      },
+      {
+        "name": "10Y Treasury Yield",
+        "symbol": "^TNX",
+        "daily_move_alert_pct": 4.0
+      },
+      {
+        "name": "VIX",
+        "symbol": "^VIX",
+        "daily_move_alert_pct": 8.0
+      }
+    ]
+  },
+  "equity_watchlist": {
+    "enabled": true,
+    "show_earnings_date": true,
+    "fmp_api_key": "$FMP_API_KEY",
+    "earnings_horizon_days": 120,
+    "earnings_email_days_before": 7,
+    "earnings_overrides": {},
+    "daily_move_alert_pct": 3.0,
+    "stock_catalyst_news": {
+      "enabled": true,
+      "min_score": 50,
+      "bullish_terms": [
+        "government contract",
+        "government investment",
+        "federal contract",
+        "wins contract",
+        "awarded contract",
+        "partnership",
+        "strategic partnership",
+        "collaboration",
+        "supply deal",
+        "multi-year deal",
+        "large order",
+        "purchase order",
+        "investment",
+        "funding",
+        "approval",
+        "raises guidance",
+        "strong guidance",
+        "upgrade",
+        "price target raised",
+        "launches",
+        "expands",
+        "data center",
+        "cloud deal",
+        "ai chip",
+        "export license"
+      ],
+      "bearish_terms": [
+        "investigation",
+        "probe",
+        "lawsuit",
+        "sues",
+        "antitrust",
+        "downgrade",
+        "price target cut",
+        "cuts guidance",
+        "weak guidance",
+        "export restriction",
+        "export ban",
+        "ban",
+        "recall",
+        "delay",
+        "misses estimates",
+        "sec charges",
+        "short seller",
+        "outage",
+        "cyberattack",
+        "bankruptcy"
+      ]
+    },
+    "stocks": [
+      {
+        "name": "Apple",
+        "symbol": "AAPL",
+        "theme": "MAG7",
+        "aliases": [
+          "Apple",
+          "iPhone",
+          "AAPL"
+        ]
+      },
+      {
+        "name": "Microsoft",
+        "symbol": "MSFT",
+        "theme": "MAG7",
+        "aliases": [
+          "Microsoft",
+          "Azure",
+          "OpenAI",
+          "MSFT"
+        ]
+      },
+      {
+        "name": "Alphabet",
+        "symbol": "GOOGL",
+        "theme": "MAG7",
+        "aliases": [
+          "Alphabet",
+          "Google",
+          "GOOGL",
+          "GOOG"
+        ]
+      },
+      {
+        "name": "Amazon",
+        "symbol": "AMZN",
+        "theme": "MAG7",
+        "aliases": [
+          "Amazon",
+          "AWS",
+          "AMZN"
+        ]
+      },
+      {
+        "name": "Meta Platforms",
+        "symbol": "META",
+        "theme": "MAG7",
+        "aliases": [
+          "Meta",
+          "Facebook",
+          "Instagram",
+          "META"
+        ]
+      },
+      {
+        "name": "Nvidia",
+        "symbol": "NVDA",
+        "theme": "MAG7",
+        "daily_move_alert_pct": 4.0,
+        "aliases": [
+          "Nvidia",
+          "NVDA",
+          "Blackwell",
+          "CUDA"
+        ]
+      },
+      {
+        "name": "Tesla",
+        "symbol": "TSLA",
+        "theme": "MAG7",
+        "daily_move_alert_pct": 4.5,
+        "aliases": [
+          "Tesla",
+          "TSLA",
+          "Model Y",
+          "Cybertruck"
+        ]
+      },
+      {
+        "name": "Broadcom",
+        "symbol": "AVGO",
+        "theme": "AI",
+        "aliases": [
+          "Broadcom",
+          "AVGO",
+          "VMware"
+        ]
+      },
+      {
+        "name": "AMD",
+        "symbol": "AMD",
+        "theme": "AI",
+        "daily_move_alert_pct": 4.0,
+        "aliases": [
+          "AMD",
+          "Advanced Micro Devices",
+          "MI300",
+          "MI350"
+        ]
+      },
+      {
+        "name": "Taiwan Semiconductor",
+        "symbol": "TSM",
+        "theme": "AI",
+        "aliases": [
+          "TSMC",
+          "Taiwan Semiconductor",
+          "TSM"
+        ]
+      },
+      {
+        "name": "Micron",
+        "symbol": "MU",
+        "theme": "AI",
+        "daily_move_alert_pct": 4.0,
+        "aliases": [
+          "Micron",
+          "MU",
+          "HBM"
+        ]
+      },
+      {
+        "name": "Super Micro Computer",
+        "symbol": "SMCI",
+        "theme": "AI",
+        "daily_move_alert_pct": 5.5,
+        "aliases": [
+          "Super Micro",
+          "Supermicro",
+          "SMCI"
+        ]
+      },
+      {
+        "name": "Palantir",
+        "symbol": "PLTR",
+        "theme": "AI",
+        "daily_move_alert_pct": 5.0,
+        "aliases": [
+          "Palantir",
+          "PLTR",
+          "AIP"
+        ]
+      },
+      {
+        "name": "Arm Holdings",
+        "symbol": "ARM",
+        "theme": "AI",
+        "daily_move_alert_pct": 5.0,
+        "aliases": [
+          "Arm Holdings",
+          "ARM"
+        ]
+      },
+      {
+        "name": "Oracle",
+        "symbol": "ORCL",
+        "theme": "AI",
+        "aliases": [
+          "Oracle",
+          "ORCL",
+          "Oracle Cloud"
+        ]
+      },
+      {
+        "name": "Adobe",
+        "symbol": "ADBE",
+        "theme": "AI",
+        "aliases": [
+          "Adobe",
+          "ADBE",
+          "Firefly"
+        ]
+      }
+    ]
+  },
+  "fomc_calendar": {
+    "enabled": true,
+    "alert_days_before": [
+      7,
+      2,
+      1,
+      0
+    ]
+  },
+  "fed": {
+    "fred_api_key": "$FRED_API_KEY",
+    "series": [
+      {
+        "name": "Effective Federal Funds Rate",
+        "id": "EFFR",
+        "alert_below": 3.5,
+        "alert_above": 6.0
+      },
+      {
+        "name": "SOFR",
+        "id": "SOFR",
+        "alert_below": 3.5,
+        "alert_above": 6.0
+      }
+    ]
+  },
+  "email": {
+    "smtp_host": "$SMTP_HOST",
+    "smtp_port": 587,
+    "starttls": true,
+    "username": "$SMTP_USERNAME",
+    "password": "$SMTP_PASSWORD",
+    "from": "$SMTP_FROM",
+    "to": [
+      "$ALERT_EMAIL_TO"
+    ],
+    "subject": "Market Watch Alert"
+  },
+  "econ_calendar": {
+    "enabled": true,
+    "horizon_days": 14,
+    "alert_days_before": [
+      1,
+      0
+    ],
+    "events": [
+      "CPI",
+      "Core CPI",
+      "PPI",
+      "PCE Price Index",
+      "Core PCE Price Index",
+      "Nonfarm Payrolls",
+      "Unemployment Rate",
+      "GDP",
+      "Retail Sales"
+    ]
+  }
+}
