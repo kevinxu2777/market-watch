@@ -1,147 +1,114 @@
 # Market Watch Tool
 
-一个本地运行的市场事件监控工具，用来盯全球新闻、宏观/地缘事件、关键金融指标、原油、黄金、美股期货、VIX、美债收益率。发现新异常后会写入 SQLite、更新 HTML 仪表盘，并在 SMTP 配置完整时发送邮件。
+本地运行的美股市场监控工具：盯全球财经新闻、宏观/地缘事件、大盘与商品指标（美股期货、VIX、美债收益率、原油、黄金、美元指数）和自选个股，给每条事件打分，重要的发邮件告警，全部数据落在本地 SQLite 和一个实时网页仪表盘里。
 
-## 开机自启（推荐方式）
+纯 Python 标准库实现，**没有任何第三方依赖**，不需要 pip install。
 
-监控已注册为 macOS LaunchAgent（`~/Library/LaunchAgents/com.kevinxu.market-watch.plist`）：开机自动启动、进程挂掉后 launchd 自动拉起，不需要手动开终端。
+## 功能一览
 
-常用命令：
-
-```bash
-# 查看状态
-launchctl print gui/$(id -u)/com.kevinxu.market-watch | grep state
-
-# 手动停止（下次开机仍会自启）
-launchctl bootout gui/$(id -u)/com.kevinxu.market-watch
-
-# 重新启动 / 改完代码后重启生效
-launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.kevinxu.market-watch.plist
-```
-
-启动早期错误写在 `launchd.log`，运行日志在 `market_watch.log`。改了代码或配置后需要 bootout + bootstrap 重启一次才生效。
+- **新闻扫描**：多个 RSS 源按关键词加权打分，低分和重复报道自动过滤
+- **大盘与商品**：标普/纳指期货、VIX、10 年期美债、原油、黄金、美元指数，超阈值告警
+- **个股 watchlist**：价格异动、财报日期倒计时、多空催化剂新闻（政府合同/评级调整/诉讼等）
+- **宏观日历**：FOMC 议息日程 + CPI/PPI/PCE/非农/GDP 等数据发布日提前提醒
+- **邮件分级**：重大事件立即发，一般告警按小时合并发，低分事件只进每日摘要
+- **实时仪表盘**：`http://127.0.0.1:8765`，带搜索/筛选/图表/健康指示灯/一键降噪反馈
 
 ## 快速开始
 
 ```bash
+git clone https://github.com/kevinxu2777/market-watch.git
+cd market-watch
+
+# 跑一次（不需要任何配置）
 python3 market_watch.py --once
-```
 
-运行一次后会生成：
-
-- `market_watch.sqlite3`：告警去重和历史记录
-- `dashboard.html`：本地仪表盘，每 60 秒自动刷新
-
-持续监控：
-
-```bash
+# 持续监控（默认每 300 秒轮询，同时启动仪表盘）
 python3 market_watch.py
 ```
 
-默认轮询间隔是 300 秒，可以在 `config.example.json` 里改 `poll_interval_seconds`。
+运行后生成：
 
-持续运行时还会启动实时网页仪表盘：
+- `market_watch.sqlite3`：告警历史、去重状态、指标历史
+- `dashboard.html`：跳转页，实际仪表盘在 `http://127.0.0.1:8765`
 
-```text
-http://127.0.0.1:8765
-```
+仪表盘顶部有**健康指示灯**：绿色表示监控在正常轮询；超过 2 倍轮询间隔没有成功轮询会变红，提示监控可能停了。仪表盘还支持搜索、类别/分数筛选、`Not important` 降噪反馈按钮和 `Send Test Email` 按钮。
 
-实时仪表盘支持搜索、类别筛选、分数筛选，以及 `Not important` 反馈按钮。点过的类似新闻以后会被降权。
-
-页面顶部有监控健康指示灯：绿色表示后台监控在正常轮询；如果超过 2 倍轮询间隔没有新的成功轮询，会变红提示"monitor may be stopped"，避免只看页面时间误以为监控还活着。
-
-仪表盘右上角有 `Send Test Email` 按钮，可以随时发送一封当前格式的测试邮件。也可以在终端运行：
+跑测试：
 
 ```bash
-python3 market_watch.py --send-test-email
+python3 -m unittest test_market_watch
 ```
-
-如果已经把 Gmail App Password 存进 Keychain，也可以直接双击：
-
-```text
-send_test_email.command
-```
-
-所有 HTTPS 请求默认做完整证书验证（本机已验证正常）。如果哪天 Python 报证书校验错误，优先安装/修复 Python 证书，或设置 `SSL_CERT_FILE` 指向可信 CA bundle；只在本地临时排查时才可以用 `MARKET_WATCH_INSECURE_SSL=1` 跳过校验，不要长期开着。
 
 ## 邮件告警配置
 
-建议用环境变量保存密码和 token：
+不配邮件也能用（告警只进仪表盘）。要开邮件，在项目目录创建 `.env.local`（已 gitignore，不会被提交）：
 
 ```bash
-export SMTP_HOST="smtp.gmail.com"
-export SMTP_USERNAME="your_email@gmail.com"
-export SMTP_PASSWORD="your_app_password"
-export SMTP_FROM="your_email@gmail.com"
-export ALERT_EMAIL_TO="target@example.com"
+SMTP_USERNAME="your_email@gmail.com"
+# 可选项（默认值如下）：
+# SMTP_HOST="smtp.gmail.com"
+# SMTP_FROM="$SMTP_USERNAME"
+# ALERT_EMAIL_TO="$SMTP_USERNAME"     # 多个收件人用英文逗号隔开
 ```
 
-多个收件邮箱用英文逗号隔开：
+Gmail 用户需要创建 [App Password](https://myaccount.google.com/apppasswords)（不是邮箱登录密码），然后运行一次：
 
 ```bash
-export ALERT_EMAIL_TO="first@example.com,second@example.com,third@example.com"
+./setup_gmail_password.command   # 密码存进 macOS Keychain，只需做一次
 ```
 
-如果使用 Gmail，需要创建 App Password，而不是直接使用邮箱登录密码。
-
-## 邮件频率策略
-
-告警邮件分三档，不再每次轮询都发：
-
-1. **重大事件**（分数 >= `alerting.critical_email_score`，默认 85）：立即发邮件，不受冷却限制，主题带 🚨
-2. **一般告警**（分数 >= `alerting.min_email_score`，默认 55）：进入待发队列，**最多每 `alerting.batch_email_minutes`（默认 60）分钟合并发一封**；如果期间出现重大事件，会搭车一起发出
-3. **低分事件**：只保存到仪表盘，出现在每日摘要里
-
-摘要邮件发出后会清空待发队列并重置冷却计时，避免同一条告警重复出现在摘要和批量邮件里。
-
-## 降噪和打分
-
-工具会给每条新闻和市场事件打分：
-
-- `news.min_score`：低于这个分数的新闻不会进入告警
-- `alerting.min_email_score`：低于这个分数的告警只保存到仪表盘，不发邮件
-- `news.keyword_weights`：越重要的关键词权重越高
-- `news.source_weights`：给更重要的新闻源加权
-- `news.suppress_keywords`：过滤个人理财、旅游、购物等低相关内容
-- `news.topic_cooldown_hours`（默认 4）：同一关键词组合的"换个说法的同一件事"在冷却期内只告警一次；分数比之前高出 `topic_escalation_score`（默认 15）以上视为事态升级，仍会告警
-
-默认摘要时间在 `digest.times_local`：
-
-- `08:30`：盘前
-- `12:00`：盘中
-- `16:15`：收盘后
-
-摘要邮件会包含当前市场快照和最近 12 小时高分事件。想关闭摘要，把 `digest.enabled` 改成 `false`。
-
-## 个股、AI 和 MAG7
-
-`equity_watchlist` 会监控 MAG7 和 AI 相关个股，默认包括：
-
-- MAG7：`AAPL`、`MSFT`、`GOOGL`、`AMZN`、`META`、`NVDA`、`TSLA`
-- AI：`AVGO`、`AMD`、`TSM`、`MU`、`SMCI`、`PLTR`、`ARM`、`ORCL`、`ADBE`
-
-每次轮询会更新价格、日涨跌幅和下一次财报日期。个股达到设定涨跌幅阈值时，会进入告警。
-
-邮件里的个股提醒会优先发送“催化剂新闻”，而不是普通价格波动。例如：
-
-- Bullish：政府合同、政府投资、合作、供应协议、大订单、上调指引、分析师上调、AI/data center/cloud deal
-- Bearish：调查、诉讼、反垄断、下调评级、下调指引、出口限制、禁令、召回、SEC charges、网络攻击
-
-普通个股价格异动仍会保存到网页和数据库，但默认只有分数达到 `stock_price_move_email_score`，也就是很大的异动，才会发邮件。
-
-财报日期来自 Nasdaq earnings calendar，默认向前查 120 天，并在当天缓存结果，避免每 5 分钟重复查询。
-
-如果想提高 MAG7 等远期财报日期覆盖率，可以配置 Financial Modeling Prep：
+验证邮件通了：
 
 ```bash
-export FMP_API_KEY="your_fmp_key"
+./send_test_email.command
 ```
 
-程序会优先使用 FMP earnings calendar，其次使用 Nasdaq。没有确认日期时会显示 `not confirmed`，这通常表示公开日历源还没有返回确认日期，而不是程序崩了。
+也可以不用 `.env.local` 和 Keychain，直接 export `SMTP_USERNAME` / `SMTP_PASSWORD` 等同名环境变量后运行 `python3 market_watch.py`。
 
-邮件不会每天重复发送所有财报日期。只有当某只 watchlist 股票进入 `earnings_email_days_before` 窗口，默认 7 天内，才会作为邮件提醒。
+## 邮件发送策略
 
-也可以在 `equity_watchlist.earnings_overrides` 手动填你确认过的日期，例如：
+告警邮件分三档，不会每次轮询都发：
+
+1. **重大事件**（分数 ≥ `alerting.critical_email_score`，默认 85）：立即发，主题带 🚨，不受冷却限制
+2. **一般告警**（分数 ≥ `alerting.min_email_score`，默认 55）：进待发队列，最多每 `alerting.batch_email_minutes`（默认 60）分钟合并发一封；期间出现重大事件会搭车一起发出
+3. **低分事件**：只进仪表盘和每日摘要
+
+每日摘要默认三次（`digest.times_local`）：`08:30` 盘前、`12:00` 盘中、`16:15` 收盘后，内容是市场快照 + 最近 12 小时高分事件。摘要发出后会清空待发队列，同一条告警不会在摘要和批量邮件里重复出现。想关摘要把 `digest.enabled` 改成 `false`。
+
+## 自定义配置
+
+```bash
+cp config.example.json config.local.json
+# 改 config.local.json 即可，.command 启动脚本会自动优先使用它（已 gitignore）
+```
+
+直接用 CLI 时手动指定：`python3 market_watch.py --config config.local.json`
+
+常用可调项：
+
+| 配置项 | 说明 |
+|---|---|
+| `poll_interval_seconds` | 轮询间隔，默认 300 秒 |
+| `news.feeds` / `keywords` / `keyword_weights` | RSS 源、触发关键词和权重 |
+| `news.source_weights` | 给更重要的新闻源加权 |
+| `news.suppress_keywords` | 屏蔽词（个人理财、旅游、购物等） |
+| `news.min_score` | 新闻入库最低分，默认 35 |
+| `news.topic_cooldown_hours` | 同话题冷却时长，默认 4 小时 |
+| `market_data.instruments` | 大盘/商品符号和涨跌幅阈值 |
+| `equity_watchlist.stocks` | 自选股（名称、别名、主题、独立阈值） |
+| `econ_calendar.events` | 要盯的宏观数据（CPI、非农等） |
+| `fed.series` | FRED 序列和告警上下限 |
+| `alerting.*` | 邮件分数阈值和批量间隔 |
+
+## 监控内容详解
+
+### 个股 watchlist
+
+默认盯 MAG7（AAPL/MSFT/GOOGL/AMZN/META/NVDA/TSLA）和 AI 主题股（AVGO/AMD/TSM/MU/SMCI/PLTR/ARM/ORCL/ADBE），每次轮询更新价格、日涨跌幅和下次财报日期。
+
+- **价格异动**：超过 `daily_move_alert_pct`（默认 3%，可按股票单独设）进告警；普通异动只上仪表盘，分数达到 `stock_price_move_email_score`（默认 85）的大异动才发邮件
+- **催化剂新闻**：命中多空关键词的个股新闻优先发邮件，带 Bullish/Bearish 标签。Bullish 如政府合同、供应协议、大订单、上调指引、分析师上调；Bearish 如调查、诉讼、反垄断、下调评级、出口限制、SEC charges、网络攻击
+- **财报提醒**：进入 `earnings_email_days_before`（默认 7 天）窗口时发邮件提醒。日期来自 Nasdaq earnings calendar（每天缓存一次）；配置 `FMP_API_KEY`（[Financial Modeling Prep](https://financialmodelingprep.com)）可提高远期覆盖率；显示 `not confirmed` 表示公开日历还没有确认日期，不是程序出错；也可在 `equity_watchlist.earnings_overrides` 手动指定：
 
 ```json
 "earnings_overrides": {
@@ -149,61 +116,93 @@ export FMP_API_KEY="your_fmp_key"
 }
 ```
 
-## FOMC 日程
+### FOMC 与宏观数据日历
 
-`fomc_calendar` 会从美联储官网读取 FOMC 日程，并在仪表盘里显示下一次议息决定日期。默认会在会议前 7 天、2 天、1 天和当天生成提醒。
+- FOMC 日程来自美联储官网，默认会前 7/2/1/0 天提醒，仪表盘显示下次议息倒计时
+- CPI、Core CPI、PPI、PCE、非农、失业率、GDP、零售销售的发布日程来自 Nasdaq economic calendar，默认发布前 1 天（medium）和当天（high，立即进邮件队列）提醒，仪表盘 Macro tab 显示 `Next CPI` 等倒计时卡片。默认向前看 14 天，结果按天缓存
 
-## 宏观数据日历
+### 美联储利率（可选）
 
-`econ_calendar` 从 Nasdaq economic calendar 读取美国宏观数据发布日程（默认盯 CPI、Core CPI、PPI、PCE、Nonfarm Payrolls、失业率、GDP、零售销售），在仪表盘 Macro tab 显示 `Next CPI` 等卡片，并在发布前 1 天和当天生成告警（当天为 high，会立即进邮件队列）。默认向前看 14 天，结果按天缓存。
-
-## 图表
-
-实时网页仪表盘有 `Charts` tab，会画出本地记录的关键指标历史曲线，包括 VIX、10 年期美债收益率、原油、黄金和美元指数。图表数据来自每次轮询保存的本地历史，至少需要两个轮询点才会显示曲线。
-
-## 可选数据源
-
-### 美联储利率
-
-工具支持 FRED。申请 FRED API key 后：
+配置 [FRED API key](https://fred.stlouisfed.org/docs/api/api_key.html) 后监控 EFFR（联邦基金有效利率）和 SOFR，超出配置区间告警：
 
 ```bash
 export FRED_API_KEY="your_fred_key"
 ```
 
-默认监控：
+## 降噪机制
 
-- `EFFR`：Effective Federal Funds Rate
-- `SOFR`：Secured Overnight Financing Rate
+- **打分过滤**：关键词权重 + 新闻源权重 + breaking/市场相关加成，低于 `news.min_score` 不入库
+- **话题冷却**：同一关键词组合（"换个说法的同一件事"）在 `topic_cooldown_hours`（默认 4 小时）内只告警一次；分数比之前高出 `topic_escalation_score`（默认 15）以上视为事态升级，仍会放行
+- **异动去重**：同一标的同方向的价格异动 12 小时内只告警一次（方向反转算新事件）
+- **人工反馈**：仪表盘每条告警有 `Not important` 按钮，点过的相似新闻以后自动降权
 
-## 自定义监控
+## 图表
 
-复制配置文件后修改：
+仪表盘 Charts tab 画所有大盘指标的历史曲线，数据来自每次轮询的本地记录（至少两个轮询点才出线）。想快速补历史数据：
 
 ```bash
-cp config.example.json config.local.json
-python3 market_watch.py --config config.local.json
+python3 market_watch.py --import-history --history-days 180
 ```
 
-可以调整：
+## 开机自启（macOS）
 
-- `news.feeds`：RSS 新闻源
-- `news.keywords`：新闻触发关键词
-- `news.high_impact_keywords`：高优先级关键词
-- `market_data.instruments`：Yahoo Finance 符号和日涨跌幅阈值
-- `fed.series`：FRED 序列和上下限
-- `email`：SMTP 邮件设置
+创建 `~/Library/LaunchAgents/com.yourname.market-watch.plist`（把两处路径换成你的 clone 位置）：
+
+```xml
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.yourname.market-watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>/path/to/market-watch/run_market_watch.command</string>
+  </array>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ThrottleInterval</key>
+  <integer>60</integer>
+  <key>StandardOutPath</key>
+  <string>/path/to/market-watch/launchd.log</string>
+  <key>StandardErrorPath</key>
+  <string>/path/to/market-watch/launchd.log</string>
+</dict>
+</plist>
+```
+
+```bash
+# 加载（开机自启 + 崩溃自动拉起）
+launchctl bootstrap gui/$(id -u) ~/Library/LaunchAgents/com.yourname.market-watch.plist
+
+# 查看状态 / 停止
+launchctl print gui/$(id -u)/com.yourname.market-watch | grep state
+launchctl bootout gui/$(id -u)/com.yourname.market-watch
+```
+
+启动早期错误看 `launchd.log`，运行日志看 `market_watch.log`。改了代码或配置需要 bootout + bootstrap 重启一次才生效。
+
+## 文件说明
+
+| 文件 | 用途 |
+|---|---|
+| `market_watch.py` | 主程序（单文件，纯标准库） |
+| `test_market_watch.py` | 单元测试 |
+| `config.example.json` | 默认配置；复制为 `config.local.json` 自定义 |
+| `run_market_watch.command` | 双击启动（读 `.env.local` + Keychain） |
+| `setup_gmail_password.command` | 一次性把 Gmail App Password 存进 Keychain |
+| `send_test_email.command` | 发一封测试邮件验证配置 |
+| `weekly_leap_review.py` | 作者的个人周报脚本，依赖仓库外的 trading-agent 项目，可忽略 |
 
 ## 常用 Yahoo Finance 符号
 
-- 原油期货：`CL=F`
-- 黄金期货：`GC=F`
-- 标普 500 期货：`ES=F`
-- 纳指 100 期货：`NQ=F`
-- VIX：`^VIX`
-- 10 年期美债收益率：`^TNX`
-- 美元指数：`DX-Y.NYB`
+原油 `CL=F` · 黄金 `GC=F` · 标普期货 `ES=F` · 纳指期货 `NQ=F` · VIX `^VIX` · 10 年期美债 `^TNX` · 美元指数 `DX-Y.NYB` · 比特币 `BTC-USD`
 
 ## 注意事项
 
-新闻源、Yahoo Finance 和 FRED 的可用性取决于网络和对应服务条款。这个工具适合做预警和信息聚合，不应该单独作为交易决策依据。
+数据来自公开接口（RSS、Yahoo Finance、Nasdaq、美联储官网、FRED），可用性取决于网络和对应服务条款。所有 HTTPS 请求默认做完整证书验证；如果本机 Python 报证书错误，优先修复证书或设置 `SSL_CERT_FILE` 指向可信 CA bundle，仅在本地临时排查时才用 `MARKET_WATCH_INSECURE_SSL=1` 跳过校验，不要长期开着。
+
+这个工具适合做预警和信息聚合，不应该单独作为交易决策依据。

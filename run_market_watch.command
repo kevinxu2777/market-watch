@@ -36,7 +36,13 @@ export SMTP_PASSWORD
 echo "Starting monitor. Press Ctrl+C to stop."
 echo "Live dashboard: http://127.0.0.1:8765"
 if [ -x .venv/bin/python ]; then
-  .venv/bin/python market_watch.py
+  PYTHON=.venv/bin/python
 else
-  python3 market_watch.py
+  PYTHON=python3
+fi
+if [ -f config.local.json ]; then
+  echo "Using config.local.json"
+  exec "$PYTHON" market_watch.py --config config.local.json
+else
+  exec "$PYTHON" market_watch.py
 fi

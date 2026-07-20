@@ -16,7 +16,6 @@ export SMTP_HOST="${SMTP_HOST:-smtp.gmail.com}"
 export SMTP_USERNAME="${SMTP_USERNAME:-${MARKET_WATCH_EMAIL:-}}"
 export SMTP_FROM="${SMTP_FROM:-$SMTP_USERNAME}"
 export ALERT_EMAIL_TO="${ALERT_EMAIL_TO:-$SMTP_USERNAME}"
-export MARKET_WATCH_INSECURE_SSL=1
 
 SERVICE="Market Watch Tool Gmail SMTP"
 ACCOUNT="$SMTP_USERNAME"
@@ -34,5 +33,14 @@ fi
 export SMTP_PASSWORD
 
 echo "Sending Market Watch test email..."
-.venv/bin/python market_watch.py --send-test-email
+if [ -x .venv/bin/python ]; then
+  PYTHON=.venv/bin/python
+else
+  PYTHON=python3
+fi
+if [ -f config.local.json ]; then
+  "$PYTHON" market_watch.py --config config.local.json --send-test-email
+else
+  "$PYTHON" market_watch.py --send-test-email
+fi
 echo "Done."
