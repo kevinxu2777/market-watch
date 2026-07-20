@@ -24,6 +24,7 @@ from __future__ import annotations
 import html as html_lib
 import os
 import re
+import socket
 import sqlite3
 import subprocess
 import sys
@@ -32,6 +33,10 @@ from datetime import date, timedelta
 from pathlib import Path
 
 MONITOR_DIR = Path(__file__).resolve().parent
+# Written after a successful email send; retry firings on the same day see it
+# and exit immediately, so the multi-slot Monday schedule in the launchd plist
+# sends at most one report per day.
+SENT_STAMP = MONITOR_DIR / ".weekly_leap_review_sent"
 TRADING_AGENT_DIR = MONITOR_DIR.parent / "trading-agent"
 CONFIG_PATH = MONITOR_DIR / "config.local.json"
 DB_PATH = MONITOR_DIR / "market_watch.sqlite3"
@@ -217,8 +222,48 @@ def run_deep_dive(symbol: str) -> str:
     return result.stdout
 
 
+def already_sent_today() -> bool:
+    try:
+        return SENT_STAMP.read_text(encoding="utf-8").strip() == date.today().isoformat()
+    except OSError:
+        return False
+
+
+def wait_for_network(timeout_seconds: int = 90) -> bool:
+    """Wait until DNS + TCP to Gmail's SMTP host works, or give up.
+
+    launchd fires this job during dark-wake windows where the network is not
+    up yet (the 2026-07-13 and 2026-07-20 runs both died this way). The wait
+    is kept shorter than a dark-wake window (~180s) so a hopeless attempt
+    exits cleanly and the next scheduled slot retries instead.
+    """
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        try:
+            with socket.create_connection(("smtp.gmail.com", 587), timeout=5):
+                return True
+        except OSError:
+            time.sleep(5)
+    return False
+
+
+def keep_awake() -> None:
+    """Hold an idle-sleep assertion for the lifetime of this process."""
+    try:
+        subprocess.Popen(["caffeinate", "-i", "-w", str(os.getpid())])
+    except OSError:
+        pass  # best effort; absence of caffeinate should never block the review
+
+
 def main() -> None:
     setup_env()
+    if already_sent_today():
+        print("Report already sent today; skipping (retry slot).")
+        return
+    if not wait_for_network():
+        print("[warn] Network not available; exiting so the next scheduled slot can retry.")
+        return
+    keep_awake()
     try:
         run_review()
     except Exception as exc:  # noqa: BLE001 - last-resort net so a failure is never silent
@@ -297,6 +342,8 @@ def run_review() -> None:
 
     subject = f"LEAP组合周报 - {today.isoformat()}" + (" [试运行]" if dry_run else "") + (" [有深度分析]" if triggered and not dry_run else "")
     ok = market_watch.send_email(config, subject, text_body, html_body)
+    if ok:
+        SENT_STAMP.write_text(date.today().isoformat(), encoding="utf-8")
     print("Email sent." if ok else "Email NOT sent (check SMTP config).")
     print(text_body)
 

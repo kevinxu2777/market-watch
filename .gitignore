@@ -9,3 +9,4 @@ config.local.json
 dev-env-backups-*/
 security-quarantine-*/
 .DS_Store
+.weekly_leap_review_sent

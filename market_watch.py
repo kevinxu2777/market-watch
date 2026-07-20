@@ -592,7 +592,9 @@ def nasdaq_earnings_on_date(day: date) -> list[dict[str, Any]] | None:
     url = f"https://api.nasdaq.com/api/calendar/earnings?{qs}"
     try:
         data = json.loads(request_text(url, timeout=10, headers=NASDAQ_API_HEADERS))
-    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+    # OSError covers URLError/TimeoutError plus raw socket errors like
+    # ConnectionResetError raised mid-read, which urlopen does not wrap.
+    except (OSError, json.JSONDecodeError) as exc:
         print(f"[warn] Nasdaq earnings failed for {day.isoformat()}: {exc}", file=sys.stderr)
         return None
     return (data.get("data") or {}).get("rows") or []
@@ -654,14 +656,23 @@ def load_earnings_calendar(config: dict[str, Any], conn: sqlite3.Connection | No
     found.update({symbol: value for symbol, value in fmp_earnings_calendar(config, symbols - set(found), today, end_day).items()})
 
     nasdaq_failures = 0
+    consecutive_failures = 0
     for offset in range(horizon_days + 1):
         if found.keys() >= symbols:
+            break
+        if consecutive_failures >= 8:
+            # Network is almost certainly down; don't grind through the rest
+            # of the horizon at ~10s of timeout per day.
+            print("[warn] Nasdaq earnings: giving up after 8 consecutive failures (network down?).", file=sys.stderr)
+            nasdaq_failures = horizon_days  # ensure the partial result is not cached
             break
         day = today + timedelta(days=offset)
         rows = nasdaq_earnings_on_date(day)
         if rows is None:
             nasdaq_failures += 1
+            consecutive_failures += 1
             continue
+        consecutive_failures = 0
         for row in rows:
             symbol = str(row.get("symbol", "")).upper()
             if symbol not in symbols or symbol in found:
