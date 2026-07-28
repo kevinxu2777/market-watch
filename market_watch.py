@@ -915,7 +915,11 @@ def load_econ_calendar(config: dict[str, Any], conn: sqlite3.Connection | None =
     if not watched:
         return {}
     today = local_now().date()
-    horizon_days = int(econ_cfg.get("horizon_days", 14))
+    # Monthly releases (CPI, PPI, Retail Sales) can sit up to ~31 days out. A
+    # horizon shorter than that leaves them unfound between prints, and since
+    # snapshots are only overwritten when a release is found, the previous
+    # month's "Next CPI" line stays in the DB and renders as a stale date.
+    horizon_days = int(econ_cfg.get("horizon_days", 40))
     cache_key = f"econ:v1:{today.isoformat()}:{horizon_days}"
     if conn:
         cached = get_state(conn, cache_key)
