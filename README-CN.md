@@ -220,7 +220,6 @@ launchctl bootout gui/$(id -u)/com.yourname.market-watch
 | `run_market_watch.command` | 双击启动（读 `.env.local` + Keychain） |
 | `setup_gmail_password.command` | 一次性把 Gmail App Password 存进 Keychain |
 | `send_test_email.command` | 发一封测试邮件验证配置 |
-| `weekly_leap_review.py` | 作者的个人周报脚本，依赖仓库外的 trading-agent 项目，可忽略 |
 
 ## 🔣 常用 Yahoo Finance 符号
 

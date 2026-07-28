@@ -220,7 +220,6 @@ Early startup errors go to `launchd.log`; runtime logs go to `market_watch.log`.
 | `run_market_watch.command` | Double-click launcher (reads `.env.local` + Keychain) |
 | `setup_gmail_password.command` | One-time Gmail App Password → Keychain |
 | `send_test_email.command` | Send a test email to verify configuration |
-| `weekly_leap_review.py` | The author's personal weekly-report script; depends on a `trading-agent` project outside this repo and can be ignored |
 
 ## 🔣 Common Yahoo Finance Symbols
 

@@ -10,3 +10,6 @@ dev-env-backups-*/
 security-quarantine-*/
 .DS_Store
 .weekly_leap_review_sent
+
+# Personal bridge to the local trading-agent repo; not part of the public tool
+weekly_leap_review.py
