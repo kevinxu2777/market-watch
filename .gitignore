@@ -13,3 +13,4 @@ security-quarantine-*/
 
 # Personal bridge to the local trading-agent repo; not part of the public tool
 weekly_leap_review.py
+.deep_dive_off
