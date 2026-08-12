@@ -897,6 +897,65 @@ def normalize_event_name(name: str) -> str:
     return re.sub(r"\s*\([^)]*\)\s*$", "", str(name)).strip().lower()
 
 
+# Which FRED release publishes each watched event, and the time of day it lands.
+# FRED mirrors the issuing agency's own calendar (BLS/BEA/Census), so it is the
+# authority here; Nasdaq's calendar was observed to be a full day late on every
+# one of these releases (2026-08-12: it dated that morning's CPI as 08-13).
+FRED_ECON_RELEASES: dict[str, int] = {
+    "cpi": 10,
+    "core cpi": 10,
+    "ppi": 46,
+    "pce price index": 54,
+    "core pce price index": 54,
+    "nonfarm payrolls": 50,
+    "unemployment rate": 50,
+    "gdp": 53,
+    "retail sales": 9,
+}
+FRED_ECON_RELEASE_TIME = "08:30"
+
+
+def fred_release_dates(release_id: int, api_key: str, start: date, end: date) -> list[str] | None:
+    """Scheduled dates for one FRED release, including not-yet-published ones."""
+    qs = urllib.parse.urlencode(
+        {
+            "release_id": release_id,
+            "api_key": api_key,
+            "file_type": "json",
+            "include_release_dates_with_no_data": "true",
+            "realtime_start": start.isoformat(),
+            "realtime_end": end.isoformat(),
+        }
+    )
+    url = f"https://api.stlouisfed.org/fred/release/dates?{qs}"
+    try:
+        data = json.loads(request_text(url, timeout=15))
+    except (urllib.error.URLError, json.JSONDecodeError, TimeoutError) as exc:
+        print(f"[warn] FRED release dates failed for release {release_id}: {exc}", file=sys.stderr)
+        return None
+    return [row["date"] for row in data.get("release_dates", []) if row.get("date")]
+
+
+def fred_econ_calendar(watched: dict[str, str], api_key: str, today: date, horizon_days: int) -> dict[str, dict[str, str]]:
+    """Nearest upcoming date for each watched event, sourced from FRED."""
+    end = today + timedelta(days=horizon_days)
+    by_release: dict[int, list[str]] = {}
+    found: dict[str, dict[str, str]] = {}
+    for key, label in watched.items():
+        release_id = FRED_ECON_RELEASES.get(key)
+        if release_id is None:
+            continue
+        if release_id not in by_release:
+            dates = fred_release_dates(release_id, api_key, today, end)
+            if dates is None:
+                continue  # leave this event to the Nasdaq fallback
+            by_release[release_id] = dates
+        upcoming = sorted(d for d in by_release[release_id] if d >= today.isoformat())
+        if upcoming:
+            found[key] = {"name": label, "date": upcoming[0], "time": FRED_ECON_RELEASE_TIME}
+    return found
+
+
 def nasdaq_econ_events_on_date(day: date) -> list[dict[str, Any]] | None:
     qs = urllib.parse.urlencode({"date": day.isoformat()})
     url = f"https://api.nasdaq.com/api/calendar/economicevents?{qs}"
@@ -920,7 +979,8 @@ def load_econ_calendar(config: dict[str, Any], conn: sqlite3.Connection | None =
     # snapshots are only overwritten when a release is found, the previous
     # month's "Next CPI" line stays in the DB and renders as a stale date.
     horizon_days = int(econ_cfg.get("horizon_days", 40))
-    cache_key = f"econ:v1:{today.isoformat()}:{horizon_days}"
+    # v2: dates now come from FRED first, so v1 entries (Nasdaq, a day late) must not be reused.
+    cache_key = f"econ:v2:{today.isoformat()}:{horizon_days}"
     if conn:
         cached = get_state(conn, cache_key)
         if cached:
@@ -929,6 +989,9 @@ def load_econ_calendar(config: dict[str, Any], conn: sqlite3.Connection | None =
             except json.JSONDecodeError:
                 pass
     found: dict[str, dict[str, str]] = {}
+    fred_key = env_value(config.get("fed", {}).get("fred_api_key")) or os.environ.get("FRED_API_KEY", "")
+    if fred_key:
+        found.update(fred_econ_calendar(watched, fred_key, today, horizon_days))
     failures = 0
     for offset in range(horizon_days + 1):
         if found.keys() >= watched.keys():
@@ -965,6 +1028,25 @@ def scan_econ_calendar(config: dict[str, Any], conn: sqlite3.Connection | None =
     alert_days = [int(day) for day in econ_cfg.get("alert_days_before", [1, 0])]
     alerts: list[Alert] = []
     snapshots: list[Snapshot] = []
+    # A release that has just happened drops out of the calendar until its next
+    # occurrence is scheduled. Nothing overwrites its old row in that gap, so the
+    # previous countdown ("Next Nonfarm Payrolls: 2026-08-08 (1 day)") would sit
+    # in the dashboard and the weekly email for days. Drop rows this scan no
+    # longer owns; "Next FOMC Decision" belongs to scan_fomc_calendar, not here.
+    if conn is not None:
+        owned = {f"next {entry['name']}".lower() for entry in calendar.values()}
+        stale = [
+            name
+            for (name,) in conn.execute(
+                "SELECT name FROM snapshots WHERE category = 'macro' AND lower(name) LIKE 'next %'"
+            ).fetchall()
+            if name.lower() not in owned and name != "Next FOMC Decision"
+        ]
+        for name in stale:
+            conn.execute("DELETE FROM snapshots WHERE category = 'macro' AND name = ?", (name,))
+        if stale:
+            conn.commit()
+            print(f"[info] dropped {len(stale)} stale macro countdown(s): {', '.join(stale)}")
     for entry in sorted(calendar.values(), key=lambda item: item["date"]):
         try:
             release_day = datetime.strptime(entry["date"], "%Y-%m-%d").date()
