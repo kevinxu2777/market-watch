@@ -548,15 +548,26 @@ def yahoo_chart(symbol: str, range_: str = "5d", interval: str = "1d") -> dict[s
         return None
 
 
-def last_two_closes(symbol: str) -> tuple[float, float] | None:
+def last_two_closes(symbol: str) -> tuple[float, float, date] | None:
+    """Previous close, latest close, and the session the latest close belongs to.
+
+    Yahoo only adds today's bar once the session opens, so before the open the
+    newest daily bar is still the previous session's. Callers need the session
+    date to tell "the stock is down 12% right now" from "the stock closed down
+    12% yesterday" - reporting the latter as the former is what made the
+    2026-08-19 pre-market email announce CRWV's 08-18 close as a fresh move.
+    """
     result = yahoo_chart(symbol)
     if not result:
         return None
     closes = result.get("indicators", {}).get("quote", [{}])[0].get("close", [])
-    clean = [float(c) for c in closes if c is not None]
-    if len(clean) < 2:
+    stamps = result.get("timestamp") or []
+    bars = [(ts, float(c)) for ts, c in zip(stamps, closes) if c is not None]
+    if len(bars) < 2:
         return None
-    return clean[-2], clean[-1]
+    last_ts, last_close = bars[-1]
+    session = datetime.fromtimestamp(int(last_ts), timezone.utc).astimezone().date()
+    return bars[-2][1], last_close, session
 
 
 def import_historical_market_data(config: dict[str, Any], conn: sqlite3.Connection, days: int = 180) -> int:
@@ -709,22 +720,24 @@ def scan_market_data(config: dict[str, Any]) -> tuple[list[Alert], list[Snapshot
         pair = last_two_closes(symbol)
         if not pair:
             continue
-        prev_close, last_close = pair
+        prev_close, last_close, session = pair
         if prev_close == 0:
             continue
         pct = (last_close - prev_close) / prev_close * 100
+        stale = session < local_now().date()
+        session_note = f"（{session.isoformat()} 收盘）" if stale else ""
         snapshots.append(
             Snapshot(
                 category="market",
                 name=instrument.get("name", symbol),
-                value=f"{last_close:.2f} ({pct:+.2f}%)",
+                value=f"{last_close:.2f} ({pct:+.2f}%){session_note}",
                 source=f"Yahoo Finance: {symbol}",
                 updated_at=local_now_text(),
                 numeric_value=last_close,
             )
         )
         threshold = float(instrument.get("daily_move_alert_pct", 2.0))
-        if abs(pct) >= threshold:
+        if abs(pct) >= threshold and not stale:
             direction = "up" if pct > 0 else "down"
             alerts.append(
                 Alert(
@@ -755,31 +768,40 @@ def scan_equity_watchlist(
         symbol = stock["symbol"]
         pair = last_two_closes(symbol)
         earnings = yahoo_earnings_date(symbol, earnings_calendar) if show_earnings else "disabled"
+        # One category for both branches: a failed fetch used to write a
+        # "watchlist:..." row that no later success could overwrite, so a stale
+        # "price unavailable" line outlived the outage that caused it.
+        label = stock.get("theme", "watchlist")
+        category = f"stock:{label}"
+        display_name = f"{stock.get('name', symbol)} ({symbol})"
         if not pair:
             snapshots.append(
                 Snapshot(
-                    category="watchlist",
-                    name=f"{stock.get('name', symbol)} ({symbol})",
+                    category=category,
+                    name=display_name,
                     value=f"price unavailable; earnings {earnings}",
                     source="Yahoo Finance price; FMP/Nasdaq earnings calendar",
                     updated_at=local_now_text(),
                 )
             )
             continue
-        prev_close, last_close = pair
+        prev_close, last_close, session = pair
         pct = (last_close - prev_close) / prev_close * 100 if prev_close else 0
-        label = stock.get("theme", "watchlist")
+        # Before the opening bell the newest bar is the previous session's, so
+        # its move is yesterday's news, not a live one.
+        stale = session < local_now().date()
+        session_note = f"（{session.isoformat()} 收盘）" if stale else ""
         snapshots.append(
             Snapshot(
-                category=f"stock:{label}",
-                name=f"{stock.get('name', symbol)} ({symbol})",
-                value=f"{last_close:.2f} ({pct:+.2f}%); earnings {earnings}",
+                category=category,
+                name=display_name,
+                value=f"{last_close:.2f} ({pct:+.2f}%){session_note}; earnings {earnings}",
                 source="Yahoo Finance price; FMP/Nasdaq earnings calendar",
                 updated_at=local_now_text(),
             )
         )
         threshold = float(stock.get("daily_move_alert_pct", default_threshold))
-        if abs(pct) >= threshold:
+        if abs(pct) >= threshold and not stale:
             direction = "up" if pct > 0 else "down"
             alerts.append(
                 Alert(
